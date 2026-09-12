@@ -1,0 +1,11 @@
+spring:
+  jpa:
+    show-sql: true
+
+app:
+  seed:
+    enabled: true
+
+logging:
+  level:
+    no.kommune.homecare: DEBUG

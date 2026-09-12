@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:homecare-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  flyway:
+    # Tests run against H2, not PostgreSQL; the Flyway migrations are Postgres-specific
+    # SQL, so tests let Hibernate generate the schema straight from the entities instead.
+    enabled: false
+
+app:
+  jwt:
+    secret: test-only-secret-key-not-for-production-use-min-256-bits-long
+    expiration-ms: 3600000
+  cors:
+    allowed-origins: http://localhost:3000
