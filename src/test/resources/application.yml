@@ -8,6 +8,11 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+    # Matches the main/docker profiles: catches lazy-association access that
+    # happens after a service's @Transactional method returns (e.g. DTO
+    # mapping done in a controller), which would otherwise only surface as a
+    # LazyInitializationException in a real deployment, not in tests.
+    open-in-view: false
   flyway:
     # Tests run against H2, not PostgreSQL; the Flyway migrations are Postgres-specific
     # SQL, so tests let Hibernate generate the schema straight from the entities instead.
