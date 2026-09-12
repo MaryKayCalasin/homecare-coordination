@@ -12,6 +12,7 @@ const navLinkClass = ({ isActive }) =>
 export function Layout() {
   const { user, logout } = useAuth()
   const { connected } = useWebSocket()
+  const canViewAudit = user?.role === 'ADMIN' || user?.role === 'COORDINATOR'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -30,6 +31,17 @@ export function Layout() {
               <NavLink to="/fravaer" className={navLinkClass}>
                 Fravær
               </NavLink>
+              <NavLink to="/journal" className={navLinkClass}>
+                Journal
+              </NavLink>
+              <NavLink to="/rapporter" className={navLinkClass}>
+                Rapporter
+              </NavLink>
+              {canViewAudit && (
+                <NavLink to="/revisjonslogg" className={navLinkClass}>
+                  Revisjonslogg
+                </NavLink>
+              )}
             </nav>
           </div>
           <div className="flex items-center gap-4">

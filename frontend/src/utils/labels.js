@@ -39,6 +39,40 @@ export const ROLE_LABELS = {
   NURSE: 'Sykepleier',
 }
 
+export const OBSERVATION_TYPE_LABELS = {
+  MEDICATION: 'Medisinering',
+  MOOD: 'Humør',
+  VITAL_SIGNS: 'Vitale tegn',
+  NUTRITION: 'Ernæring',
+  WOUND_CARE: 'Sårstell',
+  INCIDENT: 'Hendelse',
+  GENERAL: 'Generelt',
+}
+
+export const MOOD_LEVEL_LABELS = {
+  VERY_POOR: 'Svært dårlig',
+  POOR: 'Dårlig',
+  NEUTRAL: 'Nøytral',
+  GOOD: 'God',
+  VERY_GOOD: 'Svært god',
+}
+
+export const SHIFT_TYPE_LABELS = {
+  DAY: 'Dagvakt (07–15)',
+  EVENING: 'Kveldsvakt (15–23)',
+  NIGHT: 'Nattevakt (23–07)',
+}
+
+export const AUDIT_ACTION_LABELS = {
+  CREATE: 'Opprettet',
+  READ: 'Lest',
+  UPDATE: 'Endret',
+  DELETE: 'Slettet',
+  LOGIN: 'Innlogging',
+  REASSIGN: 'Omfordelt',
+  EXPORT: 'Eksportert',
+}
+
 export function formatTime(instant) {
   if (!instant) return '–'
   return new Date(instant).toLocaleTimeString('no-NO', {
