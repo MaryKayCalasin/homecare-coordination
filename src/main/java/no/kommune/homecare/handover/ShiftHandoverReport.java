@@ -4,7 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -65,7 +64,15 @@ public class ShiftHandoverReport extends BaseEntity {
     @Column(nullable = false)
     private int unresolvedUrgentCount;
 
-    @Lob
-    @Column(nullable = false)
+    /**
+     * Plain {@code text}, deliberately not {@code @Lob}: on PostgreSQL,
+     * {@code @Lob String} maps to a large object (an {@code oid} reference
+     * requiring cursor-based streaming) rather than an ordinary text column,
+     * which fails outside an open transaction - and with
+     * {@code spring.jpa.open-in-view: false}, every read of an existing
+     * report happens after the owning service's @Transactional method has
+     * already returned.
+     */
+    @Column(nullable = false, columnDefinition = "text")
     private String summary;
 }
