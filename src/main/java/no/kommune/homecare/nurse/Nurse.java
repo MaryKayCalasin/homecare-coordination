@@ -46,6 +46,10 @@ public class Nurse extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String municipality;
 
+    /** The bydel (borough) this nurse works within, for kommuner - only Oslo today - organized that way. */
+    @Column(length = 100)
+    private String bydel;
+
     /** Links to the login account this nurse uses, if they have platform access. */
     @Column
     private UUID userId;

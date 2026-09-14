@@ -52,7 +52,7 @@ public class AuthService {
         if (request.role() != Role.ADMIN && (request.municipality() == null || request.municipality().isBlank())) {
             throw new BusinessRuleException("municipality is required for role " + request.role());
         }
-        CurrentUser.assertAccessible(request.municipality());
+        CurrentUser.assertAccessible(request.municipality(), request.bydel());
 
         User user = User.builder()
                 .username(request.username())
@@ -61,6 +61,7 @@ public class AuthService {
                 .fullName(request.fullName())
                 .role(request.role())
                 .municipality(request.municipality())
+                .bydel(request.bydel())
                 .enabled(true)
                 .build();
 

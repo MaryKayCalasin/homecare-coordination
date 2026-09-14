@@ -36,15 +36,41 @@ public final class CurrentUser {
         return get().map(AuthenticatedUser::getMunicipality).filter(m -> m != null && !m.isBlank());
     }
 
+    /** The current account's bydel, or empty if unset - true for every kommune except Oslo. */
+    public static Optional<String> bydel() {
+        return get().map(AuthenticatedUser::getBydel).filter(b -> b != null && !b.isBlank());
+    }
+
     /**
      * Throws {@link AccessDeniedException} if the current account is
      * municipality-scoped and {@code resourceMunicipality} doesn't match.
      * A platform-wide account (or no authentication at all) always passes.
      */
     public static void assertAccessible(String resourceMunicipality) {
-        municipality().ifPresent(own -> {
-            if (resourceMunicipality == null || !resourceMunicipality.equalsIgnoreCase(own)) {
+        assertAccessible(resourceMunicipality, null);
+    }
+
+    /**
+     * As {@link #assertAccessible(String)}, plus - only when the current
+     * account itself has a bydel set - requires {@code resourceBydel} to
+     * match it too. A resource with no bydel recorded fails this check
+     * rather than being silently let through: for a bydel-scoped Oslo
+     * account, an untagged patient is a data-quality gap to fix, not an
+     * implicit grant to every bydel's staff.
+     */
+    public static void assertAccessible(String resourceMunicipality, String resourceBydel) {
+        get().ifPresent(user -> {
+            String ownMunicipality = user.getMunicipality();
+            if (ownMunicipality == null || ownMunicipality.isBlank()) {
+                return; // platform-wide account
+            }
+            if (resourceMunicipality == null || !resourceMunicipality.equalsIgnoreCase(ownMunicipality)) {
                 throw new AccessDeniedException("Not authorized for this municipality");
+            }
+            String ownBydel = user.getBydel();
+            if (ownBydel != null && !ownBydel.isBlank()
+                    && (resourceBydel == null || !resourceBydel.equalsIgnoreCase(ownBydel))) {
+                throw new AccessDeniedException("Not authorized for this bydel");
             }
         });
     }

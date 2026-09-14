@@ -28,7 +28,7 @@ public class PatientService {
         if (patientRepository.existsByNationalId(request.nationalId())) {
             throw new BusinessRuleException("A patient with this national ID already exists");
         }
-        CurrentUser.assertAccessible(request.municipality());
+        CurrentUser.assertAccessible(request.municipality(), request.bydel());
         Patient patient = Patient.builder()
                 .fullName(request.fullName())
                 .nationalId(request.nationalId())
@@ -37,6 +37,7 @@ public class PatientService {
                 .postalCode(request.postalCode())
                 .city(request.city())
                 .municipality(request.municipality())
+                .bydel(request.bydel())
                 .phone(request.phone())
                 .nextOfKinName(request.nextOfKinName())
                 .nextOfKinPhone(request.nextOfKinPhone())
@@ -54,25 +55,31 @@ public class PatientService {
     public Patient getById(UUID id) {
         Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Patient", id));
-        CurrentUser.assertAccessible(patient.getMunicipality());
+        CurrentUser.assertAccessible(patient.getMunicipality(), patient.getBydel());
         return patient;
     }
 
     public Page<Patient> findAll(Pageable pageable) {
         return CurrentUser.municipality()
-                .map(m -> patientRepository.findByMunicipalityIgnoreCaseAndActiveTrue(m, pageable))
+                .map(m -> CurrentUser.bydel()
+                        .map(b -> patientRepository.findByMunicipalityIgnoreCaseAndBydelIgnoreCaseAndActiveTrue(m, b, pageable))
+                        .orElseGet(() -> patientRepository.findByMunicipalityIgnoreCaseAndActiveTrue(m, pageable)))
                 .orElseGet(() -> patientRepository.findByActiveTrue(pageable));
     }
 
     public Page<Patient> search(String name, Pageable pageable) {
         return CurrentUser.municipality()
-                .map(m -> patientRepository.findByFullNameContainingIgnoreCaseAndMunicipalityIgnoreCase(name, m, pageable))
+                .map(m -> CurrentUser.bydel()
+                        .map(b -> patientRepository.findByFullNameContainingIgnoreCaseAndMunicipalityIgnoreCaseAndBydelIgnoreCase(name, m, b, pageable))
+                        .orElseGet(() -> patientRepository.findByFullNameContainingIgnoreCaseAndMunicipalityIgnoreCase(name, m, pageable)))
                 .orElseGet(() -> patientRepository.findByFullNameContainingIgnoreCase(name, pageable));
     }
 
     public Page<Patient> findByMunicipality(String municipality, Pageable pageable) {
         CurrentUser.assertAccessible(municipality);
-        return patientRepository.findByMunicipalityIgnoreCaseAndActiveTrue(municipality, pageable);
+        return CurrentUser.bydel()
+                .map(b -> patientRepository.findByMunicipalityIgnoreCaseAndBydelIgnoreCaseAndActiveTrue(municipality, b, pageable))
+                .orElseGet(() -> patientRepository.findByMunicipalityIgnoreCaseAndActiveTrue(municipality, pageable));
     }
 
     public List<String> findActiveMunicipalities() {
@@ -85,13 +92,14 @@ public class PatientService {
     @Transactional
     public Patient update(UUID id, PatientRequest request) {
         Patient patient = getById(id);
-        CurrentUser.assertAccessible(request.municipality());
+        CurrentUser.assertAccessible(request.municipality(), request.bydel());
         patient.setFullName(request.fullName());
         patient.setDateOfBirth(request.dateOfBirth());
         patient.setAddress(request.address());
         patient.setPostalCode(request.postalCode());
         patient.setCity(request.city());
         patient.setMunicipality(request.municipality());
+        patient.setBydel(request.bydel());
         patient.setPhone(request.phone());
         patient.setNextOfKinName(request.nextOfKinName());
         patient.setNextOfKinPhone(request.nextOfKinPhone());

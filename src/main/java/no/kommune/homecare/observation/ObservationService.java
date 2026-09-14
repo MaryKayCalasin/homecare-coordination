@@ -78,7 +78,7 @@ public class ObservationService {
     public Observation getById(UUID id) {
         Observation observation = observationRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Observation", id));
-        CurrentUser.assertAccessible(observation.getPatient().getMunicipality());
+        CurrentUser.assertAccessible(observation.getPatient().getMunicipality(), observation.getPatient().getBydel());
         return observation;
     }
 
@@ -105,6 +105,7 @@ public class ObservationService {
         return CurrentUser.municipality()
                 .map(m -> observations.stream()
                         .filter(o -> m.equalsIgnoreCase(o.getPatient().getMunicipality()))
+                        .filter(o -> CurrentUser.bydel().map(b -> b.equalsIgnoreCase(o.getPatient().getBydel())).orElse(true))
                         .toList())
                 .orElse(observations);
     }

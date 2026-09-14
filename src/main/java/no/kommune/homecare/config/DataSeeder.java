@@ -55,6 +55,21 @@ public class DataSeeder implements CommandLineRunner {
                 .enabled(true)
                 .build());
 
+        // Oslo delivers hjemmetjenesten through bydeler; two are seeded here -
+        // Sagene and Grünerløkka - specifically so the bydel-level tenant
+        // isolation (CurrentUser) has something real to demonstrate: a Sagene
+        // account should never see Grünerløkka's coordinator, nurse, or patient.
+        userRepository.save(User.builder()
+                .username("mari.sagene")
+                .email("mari.sagene@example-kommune.no")
+                .passwordHash(passwordEncoder.encode("ChangeMe123!"))
+                .fullName("Mari Halvorsen")
+                .role(Role.COORDINATOR)
+                .municipality("Oslo")
+                .bydel("Sagene")
+                .enabled(true)
+                .build());
+
         User nurseUser = userRepository.save(User.builder()
                 .username("kari.nordmann")
                 .email("kari.nordmann@example-kommune.no")
@@ -62,6 +77,7 @@ public class DataSeeder implements CommandLineRunner {
                 .fullName("Kari Nordmann")
                 .role(Role.NURSE)
                 .municipality("Oslo")
+                .bydel("Sagene")
                 .enabled(true)
                 .build());
 
@@ -71,6 +87,7 @@ public class DataSeeder implements CommandLineRunner {
                 .phone("+47 900 00 001")
                 .email(nurseUser.getEmail())
                 .municipality("Oslo")
+                .bydel("Sagene")
                 .userId(nurseUser.getId())
                 .qualifications(Set.of(Qualification.REGISTERED_NURSE, Qualification.MEDICATION_ADMINISTRATION))
                 .active(true)
@@ -83,13 +100,62 @@ public class DataSeeder implements CommandLineRunner {
                 .postalCode("0155")
                 .city("Oslo")
                 .municipality("Oslo")
+                .bydel("Sagene")
                 .phone("+47 900 00 100")
                 .primaryDiagnosis("Type 2 diabetes")
                 .careLevel(CareLevel.MEDIUM)
                 .active(true)
                 .build());
 
-        log.info("Seeded dev data: admin user 'admin', nurse user '{}' (nurse id {})",
-                nurseUser.getUsername(), nurse.getId());
+        userRepository.save(User.builder()
+                .username("per.grunerlokka")
+                .email("per.grunerlokka@example-kommune.no")
+                .passwordHash(passwordEncoder.encode("ChangeMe123!"))
+                .fullName("Per Johansen")
+                .role(Role.COORDINATOR)
+                .municipality("Oslo")
+                .bydel("Grünerløkka")
+                .enabled(true)
+                .build());
+
+        User otherNurseUser = userRepository.save(User.builder()
+                .username("lise.haugen")
+                .email("lise.haugen@example-kommune.no")
+                .passwordHash(passwordEncoder.encode("ChangeMe123!"))
+                .fullName("Lise Haugen")
+                .role(Role.NURSE)
+                .municipality("Oslo")
+                .bydel("Grünerløkka")
+                .enabled(true)
+                .build());
+
+        nurseRepository.save(Nurse.builder()
+                .fullName("Lise Haugen")
+                .employeeId("EMP-1002")
+                .phone("+47 900 00 002")
+                .email(otherNurseUser.getEmail())
+                .municipality("Oslo")
+                .bydel("Grünerløkka")
+                .userId(otherNurseUser.getId())
+                .qualifications(Set.of(Qualification.REGISTERED_NURSE))
+                .active(true)
+                .build());
+
+        patientRepository.save(Patient.builder()
+                .fullName("Grete Iversen")
+                .nationalId("02029012345")
+                .address("Thorvald Meyers gate 10")
+                .postalCode("0555")
+                .city("Oslo")
+                .municipality("Oslo")
+                .bydel("Grünerløkka")
+                .phone("+47 900 00 200")
+                .primaryDiagnosis("Hoftebrudd, rehabilitering")
+                .careLevel(CareLevel.HIGH)
+                .active(true)
+                .build());
+
+        log.info("Seeded dev data: admin user 'admin', bydel-scoped users 'mari.sagene'/'kari.nordmann' (Sagene) "
+                + "and 'per.grunerlokka'/'lise.haugen' (Grünerløkka), nurse id {}", nurse.getId());
     }
 }

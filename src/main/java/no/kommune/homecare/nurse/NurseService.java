@@ -26,13 +26,14 @@ public class NurseService {
         if (nurseRepository.existsByEmployeeId(request.employeeId())) {
             throw new BusinessRuleException("A nurse with employee ID " + request.employeeId() + " already exists");
         }
-        CurrentUser.assertAccessible(request.municipality());
+        CurrentUser.assertAccessible(request.municipality(), request.bydel());
         Nurse nurse = Nurse.builder()
                 .fullName(request.fullName())
                 .employeeId(request.employeeId())
                 .phone(request.phone())
                 .email(request.email())
                 .municipality(request.municipality())
+                .bydel(request.bydel())
                 .userId(request.userId())
                 .qualifications(request.qualifications() == null ? new HashSet<>() : new HashSet<>(request.qualifications()))
                 .active(true)
@@ -43,29 +44,34 @@ public class NurseService {
     public Nurse getById(UUID id) {
         Nurse nurse = nurseRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Nurse", id));
-        CurrentUser.assertAccessible(nurse.getMunicipality());
+        CurrentUser.assertAccessible(nurse.getMunicipality(), nurse.getBydel());
         return nurse;
     }
 
     public Page<Nurse> findAll(Pageable pageable) {
         return CurrentUser.municipality()
-                .map(m -> nurseRepository.findPageByMunicipalityIgnoreCaseAndActiveTrue(m, pageable))
+                .map(m -> CurrentUser.bydel()
+                        .map(b -> nurseRepository.findPageByMunicipalityIgnoreCaseAndBydelIgnoreCaseAndActiveTrue(m, b, pageable))
+                        .orElseGet(() -> nurseRepository.findPageByMunicipalityIgnoreCaseAndActiveTrue(m, pageable)))
                 .orElseGet(() -> nurseRepository.findByActiveTrue(pageable));
     }
 
     public List<Nurse> findByMunicipality(String municipality) {
         CurrentUser.assertAccessible(municipality);
-        return nurseRepository.findByMunicipalityIgnoreCaseAndActiveTrue(municipality);
+        return CurrentUser.bydel()
+                .map(b -> nurseRepository.findByMunicipalityIgnoreCaseAndBydelIgnoreCaseAndActiveTrue(municipality, b))
+                .orElseGet(() -> nurseRepository.findByMunicipalityIgnoreCaseAndActiveTrue(municipality));
     }
 
     @Transactional
     public Nurse update(UUID id, NurseRequest request) {
         Nurse nurse = getById(id);
-        CurrentUser.assertAccessible(request.municipality());
+        CurrentUser.assertAccessible(request.municipality(), request.bydel());
         nurse.setFullName(request.fullName());
         nurse.setPhone(request.phone());
         nurse.setEmail(request.email());
         nurse.setMunicipality(request.municipality());
+        nurse.setBydel(request.bydel());
         nurse.setUserId(request.userId());
         if (request.qualifications() != null) {
             nurse.setQualifications(new HashSet<>(request.qualifications()));

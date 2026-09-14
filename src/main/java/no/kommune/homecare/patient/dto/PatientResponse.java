@@ -15,6 +15,7 @@ public record PatientResponse(
         String postalCode,
         String city,
         String municipality,
+        String bydel,
         String phone,
         String nextOfKinName,
         String nextOfKinPhone,
@@ -28,7 +29,7 @@ public record PatientResponse(
     public static PatientResponse from(Patient p) {
         return new PatientResponse(
                 p.getId(), p.getFullName(), p.getNationalId(), p.getDateOfBirth(), p.getAddress(),
-                p.getPostalCode(), p.getCity(), p.getMunicipality(), p.getPhone(), p.getNextOfKinName(),
+                p.getPostalCode(), p.getCity(), p.getMunicipality(), p.getBydel(), p.getPhone(), p.getNextOfKinName(),
                 p.getNextOfKinPhone(), p.getPrimaryDiagnosis(), p.getCareLevel(), p.getCareNotes(), p.isActive(),
                 p.getLatitude(), p.getLongitude()
         );

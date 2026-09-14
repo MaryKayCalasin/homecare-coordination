@@ -53,6 +53,16 @@ public class User extends BaseEntity {
     @Column(length = 100)
     private String municipality;
 
+    /**
+     * The bydel (borough) this account is scoped to within its
+     * municipality, if any. Only Oslo delivers hjemmetjenesten through
+     * bydeler today; every other kommune's accounts leave this null, and
+     * {@link no.kommune.homecare.security.CurrentUser} only enforces it
+     * when both the account and the resource have one set.
+     */
+    @Column(length = 100)
+    private String bydel;
+
     @Builder.Default
     @Column(nullable = false)
     private boolean enabled = true;

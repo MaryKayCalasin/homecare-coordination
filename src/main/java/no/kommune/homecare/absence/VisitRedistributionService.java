@@ -57,9 +57,15 @@ public class VisitRedistributionService {
                 .sorted(Comparator.comparing(Visit::getScheduledStart))
                 .toList();
 
-        List<Nurse> candidates = nurseRepository
-                .findByMunicipalityIgnoreCaseAndActiveTrue(absentNurse.getMunicipality())
-                .stream()
+        // If the absent nurse belongs to a bydel (Oslo only, today), candidates are
+        // drawn from that bydel, not the whole kommune - a Bydel Sagene coordinator
+        // has no organizational reach into Bydel Grünerløkka's patients or staff.
+        List<Nurse> candidatePool = absentNurse.getBydel() == null || absentNurse.getBydel().isBlank()
+                ? nurseRepository.findByMunicipalityIgnoreCaseAndActiveTrue(absentNurse.getMunicipality())
+                : nurseRepository.findByMunicipalityIgnoreCaseAndBydelIgnoreCaseAndActiveTrue(
+                        absentNurse.getMunicipality(), absentNurse.getBydel());
+
+        List<Nurse> candidates = candidatePool.stream()
                 .filter(n -> !n.getId().equals(absentNurse.getId()))
                 .toList();
 

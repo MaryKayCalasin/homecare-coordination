@@ -71,7 +71,7 @@ public class VisitService {
     public Visit getById(UUID id) {
         Visit visit = visitRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Visit", id));
-        CurrentUser.assertAccessible(visit.getPatient().getMunicipality());
+        CurrentUser.assertAccessible(visit.getPatient().getMunicipality(), visit.getPatient().getBydel());
         return visit;
     }
 
@@ -107,16 +107,26 @@ public class VisitService {
      */
     private List<Visit> filterToOwnMunicipality(List<Visit> visits) {
         return CurrentUser.municipality()
-                .map(m -> visits.stream().filter(v -> m.equalsIgnoreCase(v.getPatient().getMunicipality())).toList())
+                .map(m -> visits.stream().filter(v -> isAccessible(v.getPatient())).toList())
                 .orElse(visits);
     }
 
     private Page<Visit> filterToOwnMunicipality(Page<Visit> visits) {
         return CurrentUser.municipality()
                 .<Page<Visit>>map(m -> new PageImpl<>(
-                        visits.getContent().stream().filter(v -> m.equalsIgnoreCase(v.getPatient().getMunicipality())).toList(),
+                        visits.getContent().stream().filter(v -> isAccessible(v.getPatient())).toList(),
                         visits.getPageable(), visits.getTotalElements()))
                 .orElse(visits);
+    }
+
+    /** As {@link CurrentUser#assertAccessible(String, String)}, but as a predicate for filtering lists. */
+    private boolean isAccessible(Patient patient) {
+        if (!CurrentUser.municipality().map(m -> m.equalsIgnoreCase(patient.getMunicipality())).orElse(true)) {
+            return false;
+        }
+        return CurrentUser.bydel()
+                .map(b -> b.equalsIgnoreCase(patient.getBydel()))
+                .orElse(true);
     }
 
     @Auditable(action = AuditAction.UPDATE, entityType = "Visit", details = "Visit rescheduled")

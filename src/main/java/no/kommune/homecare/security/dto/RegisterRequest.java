@@ -12,6 +12,7 @@ public record RegisterRequest(
         @NotBlank @Size(min = 8) String password,
         @NotBlank String fullName,
         @NotNull Role role,
-        String municipality
+        String municipality,
+        String bydel
 ) {
 }

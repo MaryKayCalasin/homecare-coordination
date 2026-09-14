@@ -52,7 +52,7 @@ public class VedtakService {
     public Vedtak getById(UUID id) {
         Vedtak vedtak = vedtakRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Vedtak", id));
-        CurrentUser.assertAccessible(vedtak.getPatient().getMunicipality());
+        CurrentUser.assertAccessible(vedtak.getPatient().getMunicipality(), vedtak.getPatient().getBydel());
         return vedtak;
     }
 

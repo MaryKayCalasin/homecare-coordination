@@ -18,6 +18,7 @@ public class AuthenticatedUser implements UserDetails {
     private final String fullName;
     private final String role;
     private final String municipality;
+    private final String bydel;
     private final boolean enabled;
 
     private AuthenticatedUser(User user) {
@@ -27,6 +28,7 @@ public class AuthenticatedUser implements UserDetails {
         this.fullName = user.getFullName();
         this.role = user.getRole().name();
         this.municipality = user.getMunicipality();
+        this.bydel = user.getBydel();
         this.enabled = user.isEnabled();
     }
 

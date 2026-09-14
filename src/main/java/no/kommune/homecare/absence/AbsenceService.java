@@ -49,12 +49,12 @@ public class AbsenceService {
     public Absence getById(UUID id) {
         Absence absence = absenceRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Absence", id));
-        CurrentUser.assertAccessible(absence.getNurse().getMunicipality());
+        CurrentUser.assertAccessible(absence.getNurse().getMunicipality(), absence.getNurse().getBydel());
         return absence;
     }
 
     public List<Absence> findByNurse(UUID nurseId) {
-        // Throws if the nurse belongs to another kommune than the caller.
+        // Throws if the nurse belongs to another kommune (or bydel) than the caller.
         nurseService.getById(nurseId);
         return absenceRepository.findByNurseId(nurseId);
     }
@@ -63,6 +63,7 @@ public class AbsenceService {
         return CurrentUser.municipality()
                 .map(m -> absenceRepository.findAll().stream()
                         .filter(a -> m.equalsIgnoreCase(a.getNurse().getMunicipality()))
+                        .filter(a -> CurrentUser.bydel().map(b -> b.equalsIgnoreCase(a.getNurse().getBydel())).orElse(true))
                         .toList())
                 .orElseGet(absenceRepository::findAll);
     }

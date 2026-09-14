@@ -15,6 +15,7 @@ public record PatientRequest(
         String postalCode,
         String city,
         @NotBlank String municipality,
+        String bydel,
         String phone,
         String nextOfKinName,
         String nextOfKinPhone,

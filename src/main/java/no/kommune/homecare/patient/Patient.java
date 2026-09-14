@@ -51,6 +51,10 @@ public class Patient extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String municipality;
 
+    /** The bydel (borough) this patient's care falls under, for kommuner - only Oslo today - organized that way. */
+    @Column(length = 100)
+    private String bydel;
+
     /**
      * Geocoded address coordinates, null until the frontend's client-side
      * Nominatim lookup has resolved this patient's address at least once.

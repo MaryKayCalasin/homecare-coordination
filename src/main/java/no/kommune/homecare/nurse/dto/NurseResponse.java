@@ -13,6 +13,7 @@ public record NurseResponse(
         String phone,
         String email,
         String municipality,
+        String bydel,
         Set<Qualification> qualifications,
         boolean active,
         boolean canGiveMedication,
@@ -25,7 +26,7 @@ public record NurseResponse(
 ) {
     public static NurseResponse from(Nurse n) {
         return new NurseResponse(n.getId(), n.getFullName(), n.getEmployeeId(), n.getPhone(), n.getEmail(),
-                n.getMunicipality(), n.getQualifications(), n.isActive(),
+                n.getMunicipality(), n.getBydel(), n.getQualifications(), n.isActive(),
                 n.isCanGiveMedication(), n.isCanDoWoundCare(), n.isCanDoIV(), n.isCanLiftHeavy(),
                 n.isCanWorkAlone(), n.isCanHandleDementia(), n.isCanDoPersonalCare());
     }

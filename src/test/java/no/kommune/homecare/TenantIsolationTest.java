@@ -41,7 +41,10 @@ class TenantIsolationTest {
 
     private Patient osloPatient;
     private Patient bergenPatient;
+    private Patient sagenePatient;
+    private Patient grunerlokkaPatient;
     private Authentication osloCoordinator;
+    private Authentication sageneCoordinator;
 
     @BeforeEach
     void setUp() {
@@ -52,6 +55,12 @@ class TenantIsolationTest {
         bergenPatient = patientRepository.save(Patient.builder()
                 .fullName("Kari Bergen").nationalId(nationalId())
                 .municipality("Bergen").careLevel(CareLevel.MEDIUM).active(true).build());
+        sagenePatient = patientRepository.save(Patient.builder()
+                .fullName("Sagene Patient").nationalId(nationalId())
+                .municipality("Oslo").bydel("Sagene").careLevel(CareLevel.MEDIUM).active(true).build());
+        grunerlokkaPatient = patientRepository.save(Patient.builder()
+                .fullName("Grünerløkka Patient").nationalId(nationalId())
+                .municipality("Oslo").bydel("Grünerløkka").careLevel(CareLevel.MEDIUM).active(true).build());
 
         User user = User.builder()
                 .username("coord.oslo." + unique).email("coord.oslo." + unique + "@example.no")
@@ -60,6 +69,14 @@ class TenantIsolationTest {
         user.setId(UUID.randomUUID());
         AuthenticatedUser principal = AuthenticatedUser.of(user);
         osloCoordinator = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+
+        User sageneUser = User.builder()
+                .username("coord.sagene." + unique).email("coord.sagene." + unique + "@example.no")
+                .passwordHash("irrelevant").fullName("Sagene Coordinator")
+                .role(Role.COORDINATOR).municipality("Oslo").bydel("Sagene").enabled(true).build();
+        sageneUser.setId(UUID.randomUUID());
+        AuthenticatedUser sagenePrincipal = AuthenticatedUser.of(sageneUser);
+        sageneCoordinator = new UsernamePasswordAuthenticationToken(sagenePrincipal, null, sagenePrincipal.getAuthorities());
     }
 
     @Test
@@ -81,6 +98,31 @@ class TenantIsolationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[*].municipality").value(
                         org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.equalTo("Oslo"))));
+    }
+
+    @Test
+    void canReadAPatientInOwnBydel() throws Exception {
+        mockMvc.perform(get("/api/patients/{id}", sagenePatient.getId()).with(authentication(sageneCoordinator)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Sagene Patient"));
+    }
+
+    @Test
+    void cannotReadAPatientInAnotherBydelOfTheSameKommune() throws Exception {
+        // Same municipality (Oslo) as the caller - only bydel differs. The old
+        // municipality-only check would have let this through.
+        mockMvc.perform(get("/api/patients/{id}", grunerlokkaPatient.getId()).with(authentication(sageneCoordinator)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aMunicipalityScopedCoordinatorWithNoBydelCanStillSeeBothBydeler() throws Exception {
+        // No bydel set on this principal, so only the municipality check applies -
+        // this is the platform-wide-within-Oslo case (e.g. an Oslo-level admin).
+        mockMvc.perform(get("/api/patients/{id}", sagenePatient.getId()).with(authentication(osloCoordinator)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/patients/{id}", grunerlokkaPatient.getId()).with(authentication(osloCoordinator)))
+                .andExpect(status().isOk());
     }
 
     private static String nationalId() {

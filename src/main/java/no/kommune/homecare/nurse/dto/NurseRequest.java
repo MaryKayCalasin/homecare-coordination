@@ -12,6 +12,7 @@ public record NurseRequest(
         String phone,
         String email,
         @NotBlank String municipality,
+        String bydel,
         UUID userId,
         Set<Qualification> qualifications
 ) {
