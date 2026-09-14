@@ -21,13 +21,16 @@ public record PatientResponse(
         String primaryDiagnosis,
         CareLevel careLevel,
         String careNotes,
-        boolean active
+        boolean active,
+        Double latitude,
+        Double longitude
 ) {
     public static PatientResponse from(Patient p) {
         return new PatientResponse(
                 p.getId(), p.getFullName(), p.getNationalId(), p.getDateOfBirth(), p.getAddress(),
                 p.getPostalCode(), p.getCity(), p.getMunicipality(), p.getPhone(), p.getNextOfKinName(),
-                p.getNextOfKinPhone(), p.getPrimaryDiagnosis(), p.getCareLevel(), p.getCareNotes(), p.isActive()
+                p.getNextOfKinPhone(), p.getPrimaryDiagnosis(), p.getCareLevel(), p.getCareNotes(), p.isActive(),
+                p.getLatitude(), p.getLongitude()
         );
     }
 }

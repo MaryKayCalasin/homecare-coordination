@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
-import { getAllPatients } from '../api/patients'
+import { getAllPatients, updatePatientCoordinates } from '../api/patients'
 import { getVisitsByDate } from '../api/visits'
 import { pinIcon } from '../components/MarkerIcon'
 import { StatusBadge } from '../components/StatusBadge'
@@ -102,6 +102,11 @@ export function MapPage() {
           const result = await geocodeAddress(addressQuery)
           if (!cancelled) {
             setLocations((prev) => ({ ...prev, [visit.patientId]: result }))
+          }
+          // Persist server-side once, so scheduling can use it for travel-time
+          // checks - not just this map view.
+          if (result && patient && patient.latitude == null) {
+            updatePatientCoordinates(patient.id, result.lat, result.lon).catch(() => {})
           }
         } catch {
           if (!cancelled) {

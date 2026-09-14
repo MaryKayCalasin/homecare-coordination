@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -68,5 +69,18 @@ public class PatientController {
     public ResponseEntity<Void> deactivate(@PathVariable UUID id) {
         patientService.deactivate(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Caches the result of the frontend's client-side Nominatim geocoding
+     * lookup for this patient's address, so visit scheduling can check
+     * travel time between consecutive visits.
+     */
+    @PatchMapping("/{id}/coordinates")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'NURSE')")
+    public PatientResponse updateCoordinates(@PathVariable UUID id,
+                                              @RequestParam double latitude,
+                                              @RequestParam double longitude) {
+        return PatientResponse.from(patientService.updateCoordinates(id, latitude, longitude));
     }
 }

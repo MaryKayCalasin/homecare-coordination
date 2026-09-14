@@ -72,7 +72,7 @@ class AuthServiceTest {
     void rejectsRegistrationWithAlreadyTakenUsername() {
         when(userRepository.existsByUsername("admin")).thenReturn(true);
 
-        RegisterRequest request = new RegisterRequest("admin", "new@example.no", "ChangeMe123!", "New Admin", Role.ADMIN);
+        RegisterRequest request = new RegisterRequest("admin", "new@example.no", "ChangeMe123!", "New Admin", Role.ADMIN, null);
 
         assertThatThrownBy(() -> authService.register(request))
                 .isInstanceOf(BusinessRuleException.class);
@@ -83,9 +83,22 @@ class AuthServiceTest {
         when(userRepository.existsByUsername("new.nurse")).thenReturn(false);
         when(userRepository.existsByEmail("taken@example.no")).thenReturn(true);
 
-        RegisterRequest request = new RegisterRequest("new.nurse", "taken@example.no", "ChangeMe123!", "New Nurse", Role.NURSE);
+        RegisterRequest request = new RegisterRequest("new.nurse", "taken@example.no", "ChangeMe123!", "New Nurse", Role.NURSE, "Oslo");
 
         assertThatThrownBy(() -> authService.register(request))
                 .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void rejectsNonAdminRegistrationWithoutMunicipality() {
+        when(userRepository.existsByUsername("new.nurse")).thenReturn(false);
+        when(userRepository.existsByEmail("new.nurse@example.no")).thenReturn(false);
+
+        RegisterRequest request = new RegisterRequest(
+                "new.nurse", "new.nurse@example.no", "ChangeMe123!", "New Nurse", Role.NURSE, " ");
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("municipality");
     }
 }

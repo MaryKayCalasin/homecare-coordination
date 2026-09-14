@@ -17,4 +17,6 @@ public interface ShiftHandoverReportRepository extends JpaRepository<ShiftHandov
             String municipality, LocalDate shiftDate, ShiftType shiftType);
 
     Page<ShiftHandoverReport> findAllByOrderByShiftDateDesc(Pageable pageable);
+
+    Page<ShiftHandoverReport> findByMunicipalityIgnoreCaseOrderByShiftDateDesc(String municipality, Pageable pageable);
 }

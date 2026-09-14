@@ -9,10 +9,14 @@ import no.kommune.homecare.nurse.Nurse;
 import no.kommune.homecare.nurse.NurseService;
 import no.kommune.homecare.patient.Patient;
 import no.kommune.homecare.patient.PatientService;
+import no.kommune.homecare.security.CurrentUser;
+import no.kommune.homecare.vedtak.Vedtak;
+import no.kommune.homecare.vedtak.VedtakService;
 import no.kommune.homecare.visit.dto.VisitRequest;
 import no.kommune.homecare.websocket.WebSocketEventPublisher;
 import no.kommune.homecare.websocket.dto.VisitUpdateMessage;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +34,7 @@ public class VisitService {
     private final PatientService patientService;
     private final NurseService nurseService;
     private final WebSocketEventPublisher eventPublisher;
+    private final VedtakService vedtakService;
 
     @Auditable(action = AuditAction.CREATE, entityType = "Visit", details = "Visit scheduled")
     @Transactional
@@ -41,7 +46,10 @@ public class VisitService {
         Nurse nurse = request.nurseId() == null ? null : nurseService.getById(request.nurseId());
 
         if (nurse != null) {
-            assertNoConflict(nurse.getId(), request.scheduledStart(), request.scheduledEnd(), null);
+            // patientService.getById/nurseService.getById already enforce that
+            // both belong to the caller's own municipality when scoped.
+            assertNoConflict(nurse.getId(), patient, request.scheduledStart(), request.scheduledEnd(), null);
+            assertQualified(nurse, request.visitType());
         }
 
         Visit visit = Visit.builder()
@@ -61,28 +69,54 @@ public class VisitService {
     }
 
     public Visit getById(UUID id) {
-        return visitRepository.findById(id)
+        Visit visit = visitRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Visit", id));
+        CurrentUser.assertAccessible(visit.getPatient().getMunicipality());
+        return visit;
     }
 
     public Page<Visit> findByPatient(UUID patientId, Pageable pageable) {
-        return visitRepository.findByPatientId(patientId, pageable);
+        // patientService is intentionally not called here to avoid an extra
+        // lookup on every page; scoping instead filters the returned visits,
+        // consistent with the other list methods below.
+        return filterToOwnMunicipality(visitRepository.findByPatientId(patientId, pageable));
     }
 
     public Page<Visit> findByNurse(UUID nurseId, Pageable pageable) {
-        return visitRepository.findByNurseId(nurseId, pageable);
+        return filterToOwnMunicipality(visitRepository.findByNurseId(nurseId, pageable));
     }
 
     public List<Visit> findByNurseAndRange(UUID nurseId, Instant from, Instant to) {
-        return visitRepository.findByNurseIdAndScheduledStartBetween(nurseId, from, to);
+        return filterToOwnMunicipality(visitRepository.findByNurseIdAndScheduledStartBetween(nurseId, from, to));
     }
 
     public List<Visit> findByStatusAndRange(VisitStatus status, Instant from, Instant to) {
-        return visitRepository.findByStatusAndScheduledStartBetween(status, from, to);
+        return filterToOwnMunicipality(visitRepository.findByStatusAndScheduledStartBetween(status, from, to));
     }
 
     public List<Visit> findByRange(Instant from, Instant to) {
-        return visitRepository.findByScheduledStartBetween(from, to);
+        return filterToOwnMunicipality(visitRepository.findByScheduledStartBetween(from, to));
+    }
+
+    /**
+     * Drops visits belonging to another kommune for a municipality-scoped
+     * caller; a platform-wide account (or no authenticated caller at all,
+     * e.g. the redistribution engine acting internally) sees everything.
+     * Filtered in application code rather than as a repository predicate
+     * since several of these queries don't join {@code patient} otherwise.
+     */
+    private List<Visit> filterToOwnMunicipality(List<Visit> visits) {
+        return CurrentUser.municipality()
+                .map(m -> visits.stream().filter(v -> m.equalsIgnoreCase(v.getPatient().getMunicipality())).toList())
+                .orElse(visits);
+    }
+
+    private Page<Visit> filterToOwnMunicipality(Page<Visit> visits) {
+        return CurrentUser.municipality()
+                .<Page<Visit>>map(m -> new PageImpl<>(
+                        visits.getContent().stream().filter(v -> m.equalsIgnoreCase(v.getPatient().getMunicipality())).toList(),
+                        visits.getPageable(), visits.getTotalElements()))
+                .orElse(visits);
     }
 
     @Auditable(action = AuditAction.UPDATE, entityType = "Visit", details = "Visit rescheduled")
@@ -93,7 +127,7 @@ public class VisitService {
             throw new BusinessRuleException("Visit start must be before end");
         }
         if (visit.getNurse() != null) {
-            assertNoConflict(visit.getNurse().getId(), newStart, newEnd, visit.getId());
+            assertNoConflict(visit.getNurse().getId(), visit.getPatient(), newStart, newEnd, visit.getId());
         }
         visit.setScheduledStart(newStart);
         visit.setScheduledEnd(newEnd);
@@ -106,7 +140,8 @@ public class VisitService {
     public Visit assignNurse(UUID visitId, UUID nurseId) {
         Visit visit = getById(visitId);
         Nurse nurse = nurseService.getById(nurseId);
-        assertNoConflict(nurse.getId(), visit.getScheduledStart(), visit.getScheduledEnd(), visit.getId());
+        assertNoConflict(nurse.getId(), visit.getPatient(), visit.getScheduledStart(), visit.getScheduledEnd(), visit.getId());
+        assertQualified(nurse, visit.getVisitType());
         visit.setNurse(nurse);
         if (visit.getStatus() == VisitStatus.CANCELLED || visit.getStatus() == VisitStatus.MISSED) {
             visit.setStatus(VisitStatus.SCHEDULED);
@@ -168,14 +203,43 @@ public class VisitService {
         return visit;
     }
 
-    private void assertNoConflict(UUID nurseId, Instant start, Instant end, UUID excludeVisitId) {
-        boolean conflict = visitRepository.findByNurseIdAndScheduledStartBetween(
+    private void assertNoConflict(UUID nurseId, Patient patient, Instant start, Instant end, UUID excludeVisitId) {
+        List<Visit> nearby = visitRepository.findByNurseIdAndScheduledStartBetween(
                         nurseId, start.minusSeconds(24 * 3600), end.plusSeconds(24 * 3600)).stream()
                 .filter(v -> !v.getId().equals(excludeVisitId))
                 .filter(v -> v.getStatus() != VisitStatus.CANCELLED)
-                .anyMatch(v -> v.overlaps(start, end));
-        if (conflict) {
+                .toList();
+
+        if (nearby.stream().anyMatch(v -> v.overlaps(start, end))) {
             throw new BusinessRuleException("Nurse already has a conflicting visit in this time window");
+        }
+        if (!TravelTime.isFeasible(nearby, patient, start, end)) {
+            throw new BusinessRuleException(
+                    "Not enough travel time for the nurse to reach this patient from an adjacent visit");
+        }
+    }
+
+    /**
+     * Records which vedtak (statutory decision) entitles the patient to this
+     * visit. Purely a traceability link today - see {@link Vedtak}'s class
+     * Javadoc for what enforcing granted hours would additionally require.
+     */
+    @Auditable(action = AuditAction.UPDATE, entityType = "Visit", details = "Visit linked to a vedtak")
+    @Transactional
+    public Visit linkVedtak(UUID visitId, UUID vedtakId) {
+        Visit visit = getById(visitId);
+        Vedtak vedtak = vedtakService.getById(vedtakId);
+        if (!vedtak.getPatient().getId().equals(visit.getPatient().getId())) {
+            throw new BusinessRuleException("This vedtak belongs to a different patient than the visit");
+        }
+        visit.setVedtak(vedtak);
+        return visit;
+    }
+
+    private void assertQualified(Nurse nurse, VisitType visitType) {
+        if (!VisitCapability.isQualified(nurse, visitType)) {
+            throw new BusinessRuleException(
+                    "Nurse " + nurse.getFullName() + " is not qualified for a " + visitType + " visit");
         }
     }
 

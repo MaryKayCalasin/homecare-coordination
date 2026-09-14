@@ -61,6 +61,7 @@ public class DataSeeder implements CommandLineRunner {
                 .passwordHash(passwordEncoder.encode("ChangeMe123!"))
                 .fullName("Kari Nordmann")
                 .role(Role.NURSE)
+                .municipality("Oslo")
                 .enabled(true)
                 .build());
 

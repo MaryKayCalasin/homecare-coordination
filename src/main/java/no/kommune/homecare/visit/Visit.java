@@ -18,6 +18,7 @@ import lombok.Setter;
 import no.kommune.homecare.common.entity.BaseEntity;
 import no.kommune.homecare.nurse.Nurse;
 import no.kommune.homecare.patient.Patient;
+import no.kommune.homecare.vedtak.Vedtak;
 
 import java.time.Instant;
 
@@ -66,6 +67,11 @@ public class Visit extends BaseEntity {
 
     @Column(length = 200)
     private String location;
+
+    /** Which statutory decision entitles the patient to this visit, if linked. Optional - see {@link Vedtak}. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vedtak_id")
+    private Vedtak vedtak;
 
     public boolean overlaps(Instant start, Instant end) {
         return scheduledStart.isBefore(end) && start.isBefore(scheduledEnd);

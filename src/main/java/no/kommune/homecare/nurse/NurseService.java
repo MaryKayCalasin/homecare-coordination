@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import no.kommune.homecare.common.exception.BusinessRuleException;
 import no.kommune.homecare.common.exception.ResourceNotFoundException;
 import no.kommune.homecare.nurse.dto.NurseRequest;
+import no.kommune.homecare.security.CurrentUser;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class NurseService {
         if (nurseRepository.existsByEmployeeId(request.employeeId())) {
             throw new BusinessRuleException("A nurse with employee ID " + request.employeeId() + " already exists");
         }
+        CurrentUser.assertAccessible(request.municipality());
         Nurse nurse = Nurse.builder()
                 .fullName(request.fullName())
                 .employeeId(request.employeeId())
@@ -39,21 +41,27 @@ public class NurseService {
     }
 
     public Nurse getById(UUID id) {
-        return nurseRepository.findById(id)
+        Nurse nurse = nurseRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Nurse", id));
+        CurrentUser.assertAccessible(nurse.getMunicipality());
+        return nurse;
     }
 
     public Page<Nurse> findAll(Pageable pageable) {
-        return nurseRepository.findByActiveTrue(pageable);
+        return CurrentUser.municipality()
+                .map(m -> nurseRepository.findPageByMunicipalityIgnoreCaseAndActiveTrue(m, pageable))
+                .orElseGet(() -> nurseRepository.findByActiveTrue(pageable));
     }
 
     public List<Nurse> findByMunicipality(String municipality) {
+        CurrentUser.assertAccessible(municipality);
         return nurseRepository.findByMunicipalityIgnoreCaseAndActiveTrue(municipality);
     }
 
     @Transactional
     public Nurse update(UUID id, NurseRequest request) {
         Nurse nurse = getById(id);
+        CurrentUser.assertAccessible(request.municipality());
         nurse.setFullName(request.fullName());
         nurse.setPhone(request.phone());
         nurse.setEmail(request.email());

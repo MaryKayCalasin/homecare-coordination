@@ -4,12 +4,14 @@ A home care management platform for Norwegian municipalities (hjemmesykepleie / 
 
 ## Features
 
-1. **Visit scheduling and coordination** — schedule, reschedule, assign, start, complete and cancel patient visits, with conflict detection so a nurse is never double-booked.
-2. **Nurse absence handling with automatic visit redistribution** — registering an absence immediately finds every affected visit and reassigns it to the least-loaded available nurse in the same municipality; anything that can't be covered is left unassigned for a coordinator to resolve, and everyone is notified in real time.
+1. **Visit scheduling and coordination** — schedule, reschedule, assign, start, complete and cancel patient visits, with conflict detection so a nurse is never double-booked, checked alongside a travel-time heuristic so back-to-back visits at different addresses leave enough time to actually get there, and a qualification check so a nurse is only assigned a visit type (medication, wound care, personal care) their work-capacity flags cover.
+2. **Nurse absence handling with automatic visit redistribution** — registering an absence immediately finds every affected visit and reassigns it to an available, qualified nurse in the same municipality, preferring one who has cared for that patient before (continuity of care) and otherwise the least-loaded; anything that can't be covered is left unassigned for a coordinator to resolve, and everyone is notified in real time.
 3. **Patient observation journal** — medication administration, mood, vital signs and incident entries per patient, with an `urgent` flag that raises an immediate alert.
 4. **Auto-generated shift handover reports** — a report summarizing completed/missed visits, medications given and unresolved urgent flags is generated automatically at every shift boundary (07:00 / 15:00 / 23:00 Europe/Oslo) and can also be triggered on demand.
 5. **Real-time updates over WebSocket** — visit changes, urgent alerts, redistribution outcomes and new handover reports are pushed over STOMP/SockJS.
 6. **Full GDPR audit trail** — every access to and change of patient data is recorded (who, what, when, from where) via an AOP aspect (`@Auditable`) plus explicit audit calls, independent of the triggering transaction.
+7. **Kommune (municipality) tenant isolation** — every login account belongs to a municipality (`User.municipality`, nullable only for a platform-wide account), and `CurrentUser` enforces it on every patient/nurse/visit/absence/observation/handover-report read and write, regardless of role. A coordinator in one kommune cannot read or list another kommune's patients.
+8. **Vedtak (statutory decision) foundation** — a `Vedtak` records the service type, granted weekly hours and validity window a kommune has formally decided a patient is entitled to (modeled after IPLOS service categories), and a visit can optionally link to the vedtak that justifies it. Tracking hours delivered against what was granted, and an actual IPLOS statistics export, are not implemented — this is the entity model and API shape, not the full entitlement system.
 
 ## Stack
 
@@ -41,6 +43,7 @@ src/main/java/no/kommune/homecare/
 ├── absence/            # Nurse absences + automatic redistribution
 ├── observation/        # Patient observation journal
 ├── handover/            # Shift handover report generation
+├── vedtak/              # Statutory decisions (entitlement foundation)
 └── websocket/            # STOMP config + real-time event publisher
 ```
 
@@ -88,13 +91,25 @@ Connect to `ws://localhost:8080/ws` (SockJS-compatible) and subscribe to:
 
 `GET /api/audit-logs` (ADMIN/COORDINATOR only) lists every recorded access and change, filterable by entity type, entity, or user. Entries are written in their own transaction (`REQUIRES_NEW`) so an audit record survives even if the triggering operation is rolled back.
 
+## Kommune tenant isolation
+
+Every login account (`User`) has a `municipality`. `no.kommune.homecare.security.CurrentUser` reads the authenticated principal straight from `SecurityContextHolder` and enforces that municipality on every patient, nurse, visit, absence, observation and handover-report read and write, regardless of role — a `municipality` left `null` on the account marks a platform-wide account (used for the initial bootstrap admin) that isn't scoped to any one kommune. List endpoints are filtered rather than rejected; single-resource endpoints (`GET /api/patients/{id}` and similar) return `403 Forbidden` for a resource outside the caller's municipality. `TenantIsolationTest` exercises this with a real `AuthenticatedUser` principal (not `@WithMockUser`'s generic one, which `CurrentUser` doesn't recognize) against a live `MockMvc` + H2 database.
+
+## Vedtak (statutory decisions)
+
+`POST /api/vedtak`, `GET /api/vedtak/{id}`, `GET /api/vedtak/by-patient/{patientId}`, `PATCH /api/vedtak/{id}/revoke` — records the administrative decision (`Vedtak`) that grants a patient a specific service under helse- og omsorgstjenesteloven: service type (modeled after IPLOS categories), granted hours per week, and a validity window. `PATCH /api/visits/{id}/link-vedtak/{vedtakId}` optionally links a visit to the vedtak that justifies it. This is the entity model and API shape, not a complete entitlement system — nothing here tracks hours actually delivered against what was granted, and there's no IPLOS statistics export.
+
 ## Tests
 
 ```bash
 mvn test
 ```
 
-Includes a Spring context load test (backed by an in-memory H2 database) and a focused unit test for the automatic visit-redistribution logic, covering both the "substitute found" and "no substitute available" cases.
+31 tests: a Spring context load test (backed by an in-memory H2 database); focused unit tests for visit-conflict detection, qualification checks, and automatic visit-redistribution (including the "substitute found" and "no substitute available" cases, qualification filtering, and continuity-of-care preference); `TravelTimeTest` for the travel-feasibility heuristic; `TenantIsolationTest`, a `MockMvc` integration test proving cross-municipality access is actually blocked; and `OpenInViewRegressionTest`, pinning the `open-in-view: false` / `LazyInitializationException` fix so that regression can't come back silently.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request: `mvn test` against a pinned JDK 17 (not whatever JDK a contributor has locally — see the Mockito/Byte Buddy/Lombok version notes in `pom.xml` if a very new local JDK breaks a build tool), plus `npm run lint` and `npm run build` for the frontend.
 
 ## Frontend
 
@@ -109,7 +124,7 @@ npm run dev
 Opens on `http://localhost:5173` (already in `app.cors.allowed-origins` by default). Log in with one of the seeded accounts (see above). Features:
 
 - **Dashbord** — today's visits (or any day, via the date navigator), with quick actions to start/complete/cancel a visit.
-- **Kart** — patient locations for the day's visits on a Leaflet/OpenStreetMap map, colored by assigned nurse. Patient addresses are geocoded client-side via OpenStreetMap's Nominatim (rate-limited to ~1 req/sec, cached in `localStorage`) since the backend doesn't store coordinates.
+- **Kart** — patient locations for the day's visits on a Leaflet/OpenStreetMap map, colored by assigned nurse. Patient addresses are geocoded client-side via OpenStreetMap's Nominatim (rate-limited to ~1 req/sec, cached in `localStorage`); a first successful lookup for a patient is also `PATCH`ed back to `/api/patients/{id}/coordinates` so the backend's travel-time check has coordinates to work with, without the backend making any geocoding calls of its own.
 - **Fravær** — register a nurse absence and watch the automatic visit redistribution outcome arrive live over WebSocket.
 - Real-time updates throughout via STOMP/SockJS (`/topic/visits`, `/topic/absences/redistribution`, `/topic/alerts/urgent`, `/topic/handover-reports`).
 

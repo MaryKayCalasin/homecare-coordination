@@ -20,6 +20,8 @@ public record PatientRequest(
         String nextOfKinPhone,
         String primaryDiagnosis,
         @NotNull CareLevel careLevel,
-        String careNotes
+        String careNotes,
+        Double latitude,
+        Double longitude
 ) {
 }

@@ -44,6 +44,15 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 20)
     private Role role;
 
+    /**
+     * The kommune this account is scoped to. Null marks a platform-wide
+     * account (not tied to a single municipality); every other account is
+     * confined by {@link no.kommune.homecare.security.CurrentUser} to only
+     * ever read or write resources in this municipality, regardless of role.
+     */
+    @Column(length = 100)
+    private String municipality;
+
     @Builder.Default
     @Column(nullable = false)
     private boolean enabled = true;

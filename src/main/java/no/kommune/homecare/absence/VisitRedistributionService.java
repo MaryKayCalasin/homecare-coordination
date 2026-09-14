@@ -6,7 +6,9 @@ import no.kommune.homecare.audit.AuditAction;
 import no.kommune.homecare.audit.AuditService;
 import no.kommune.homecare.nurse.Nurse;
 import no.kommune.homecare.nurse.NurseRepository;
+import no.kommune.homecare.visit.TravelTime;
 import no.kommune.homecare.visit.Visit;
+import no.kommune.homecare.visit.VisitCapability;
 import no.kommune.homecare.visit.VisitRepository;
 import no.kommune.homecare.visit.VisitService;
 import no.kommune.homecare.visit.VisitStatus;
@@ -99,9 +101,28 @@ public class VisitRedistributionService {
         return message;
     }
 
+    /**
+     * Picks a substitute from whoever is available and qualified for this
+     * visit's type, preferring a nurse who has cared for this patient
+     * before (continuity of care - "kontaktsykepleier" in Norwegian home
+     * care) over a stranger, and breaking ties within that preferred group
+     * by current load. Falls back to the full eligible pool, still
+     * least-loaded first, if nobody with prior history is available.
+     */
     private Nurse pickSubstitute(List<Nurse> candidates, Map<UUID, Long> loadByNurse, Visit visit, Absence absence) {
-        return candidates.stream()
+        List<Nurse> eligible = candidates.stream()
                 .filter(candidate -> isAvailable(candidate, visit, absence))
+                .filter(candidate -> VisitCapability.isQualified(candidate, visit.getVisitType()))
+                .toList();
+
+        List<Nurse> withHistory = eligible.stream()
+                .filter(candidate -> visitRepository.existsByNurseIdAndPatientIdAndStatusNot(
+                        candidate.getId(), visit.getPatient().getId(), VisitStatus.CANCELLED))
+                .toList();
+
+        List<Nurse> pool = withHistory.isEmpty() ? eligible : withHistory;
+
+        return pool.stream()
                 .min(Comparator.comparingLong(n -> loadByNurse.getOrDefault(n.getId(), 0L)))
                 .orElse(null);
     }
@@ -115,15 +136,20 @@ public class VisitRedistributionService {
             return false;
         }
 
-        boolean hasConflict = visitRepository
+        List<Visit> nearby = visitRepository
                 .findByNurseIdAndScheduledStartBetween(
                         candidate.getId(),
                         visit.getScheduledStart().minusSeconds(24 * 3600),
                         visit.getScheduledEnd().plusSeconds(24 * 3600))
                 .stream()
                 .filter(v -> v.getStatus() != VisitStatus.CANCELLED)
-                .anyMatch(v -> v.overlaps(visit.getScheduledStart(), visit.getScheduledEnd()));
+                .toList();
 
-        return !hasConflict;
+        boolean hasConflict = nearby.stream().anyMatch(v -> v.overlaps(visit.getScheduledStart(), visit.getScheduledEnd()));
+        if (hasConflict) {
+            return false;
+        }
+
+        return TravelTime.isFeasible(nearby, visit.getPatient(), visit.getScheduledStart(), visit.getScheduledEnd());
     }
 }

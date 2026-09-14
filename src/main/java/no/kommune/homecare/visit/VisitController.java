@@ -106,4 +106,10 @@ public class VisitController {
     public VisitResponse markMissed(@PathVariable UUID id) {
         return VisitResponse.from(visitService.markMissed(id));
     }
+
+    @PatchMapping("/{id}/link-vedtak/{vedtakId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    public VisitResponse linkVedtak(@PathVariable UUID id, @PathVariable UUID vedtakId) {
+        return VisitResponse.from(visitService.linkVedtak(id, vedtakId));
+    }
 }

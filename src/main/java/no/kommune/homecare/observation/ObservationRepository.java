@@ -29,7 +29,9 @@ public interface ObservationRepository extends JpaRepository<Observation, UUID> 
     @EntityGraph(attributePaths = {"patient", "recordedBy"})
     List<Observation> findByUrgentTrueAndUrgentResolvedFalseOrderByRecordedAtDesc();
 
+    @EntityGraph(attributePaths = "patient")
     List<Observation> findByRecordedAtBetweenOrderByRecordedAtAsc(Instant from, Instant to);
 
+    @EntityGraph(attributePaths = "patient")
     List<Observation> findByUrgentTrueAndRecordedAtBetween(Instant from, Instant to);
 }

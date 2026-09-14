@@ -6,6 +6,7 @@ import no.kommune.homecare.audit.Auditable;
 import no.kommune.homecare.common.exception.BusinessRuleException;
 import no.kommune.homecare.common.exception.ResourceNotFoundException;
 import no.kommune.homecare.patient.dto.PatientRequest;
+import no.kommune.homecare.security.CurrentUser;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class PatientService {
         if (patientRepository.existsByNationalId(request.nationalId())) {
             throw new BusinessRuleException("A patient with this national ID already exists");
         }
+        CurrentUser.assertAccessible(request.municipality());
         Patient patient = Patient.builder()
                 .fullName(request.fullName())
                 .nationalId(request.nationalId())
@@ -41,6 +43,8 @@ public class PatientService {
                 .primaryDiagnosis(request.primaryDiagnosis())
                 .careLevel(request.careLevel())
                 .careNotes(request.careNotes())
+                .latitude(request.latitude())
+                .longitude(request.longitude())
                 .active(true)
                 .build();
         return patientRepository.save(patient);
@@ -48,30 +52,40 @@ public class PatientService {
 
     @Auditable(action = AuditAction.READ, entityType = "Patient", details = "Patient record accessed")
     public Patient getById(UUID id) {
-        return patientRepository.findById(id)
+        Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Patient", id));
+        CurrentUser.assertAccessible(patient.getMunicipality());
+        return patient;
     }
 
     public Page<Patient> findAll(Pageable pageable) {
-        return patientRepository.findByActiveTrue(pageable);
+        return CurrentUser.municipality()
+                .map(m -> patientRepository.findByMunicipalityIgnoreCaseAndActiveTrue(m, pageable))
+                .orElseGet(() -> patientRepository.findByActiveTrue(pageable));
     }
 
     public Page<Patient> search(String name, Pageable pageable) {
-        return patientRepository.findByFullNameContainingIgnoreCase(name, pageable);
+        return CurrentUser.municipality()
+                .map(m -> patientRepository.findByFullNameContainingIgnoreCaseAndMunicipalityIgnoreCase(name, m, pageable))
+                .orElseGet(() -> patientRepository.findByFullNameContainingIgnoreCase(name, pageable));
     }
 
     public Page<Patient> findByMunicipality(String municipality, Pageable pageable) {
+        CurrentUser.assertAccessible(municipality);
         return patientRepository.findByMunicipalityIgnoreCaseAndActiveTrue(municipality, pageable);
     }
 
     public List<String> findActiveMunicipalities() {
-        return patientRepository.findDistinctActiveMunicipalities();
+        return CurrentUser.municipality()
+                .map(List::of)
+                .orElseGet(patientRepository::findDistinctActiveMunicipalities);
     }
 
     @Auditable(action = AuditAction.UPDATE, entityType = "Patient", details = "Patient record updated")
     @Transactional
     public Patient update(UUID id, PatientRequest request) {
         Patient patient = getById(id);
+        CurrentUser.assertAccessible(request.municipality());
         patient.setFullName(request.fullName());
         patient.setDateOfBirth(request.dateOfBirth());
         patient.setAddress(request.address());
@@ -84,6 +98,25 @@ public class PatientService {
         patient.setPrimaryDiagnosis(request.primaryDiagnosis());
         patient.setCareLevel(request.careLevel());
         patient.setCareNotes(request.careNotes());
+        if (request.latitude() != null && request.longitude() != null) {
+            patient.setLatitude(request.latitude());
+            patient.setLongitude(request.longitude());
+        }
+        return patient;
+    }
+
+    /**
+     * Records the result of the frontend's client-side geocoding lookup for
+     * this patient's address, so later visit scheduling can check travel
+     * time between consecutive visits. Deliberately narrower than the full
+     * {@link #update} - a nurse or coordinator viewing the map shouldn't
+     * need edit rights on the whole patient record just to cache a lookup.
+     */
+    @Transactional
+    public Patient updateCoordinates(UUID id, double latitude, double longitude) {
+        Patient patient = getById(id);
+        patient.setLatitude(latitude);
+        patient.setLongitude(longitude);
         return patient;
     }
 

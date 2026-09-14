@@ -6,6 +6,7 @@ import no.kommune.homecare.common.exception.ResourceNotFoundException;
 import no.kommune.homecare.observation.Observation;
 import no.kommune.homecare.observation.ObservationService;
 import no.kommune.homecare.patient.PatientService;
+import no.kommune.homecare.security.CurrentUser;
 import no.kommune.homecare.visit.Visit;
 import no.kommune.homecare.visit.VisitService;
 import no.kommune.homecare.visit.VisitStatus;
@@ -79,6 +80,10 @@ public class ShiftHandoverService {
 
     @Transactional
     public ShiftHandoverReport generate(LocalDate shiftDate, ShiftType shiftType, String municipality, String generatedBy) {
+        // A no-op for the scheduled job (runs with no authenticated caller);
+        // stops a municipality-scoped coordinator from generating another
+        // kommune's report via the manual /generate endpoint.
+        CurrentUser.assertAccessible(municipality);
         Instant start = shiftStart(shiftDate, shiftType);
         Instant end = shiftEnd(shiftDate, shiftType);
 
@@ -132,16 +137,21 @@ public class ShiftHandoverService {
     }
 
     public ShiftHandoverReport getById(UUID id) {
-        return reportRepository.findById(id)
+        ShiftHandoverReport report = reportRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("ShiftHandoverReport", id));
+        CurrentUser.assertAccessible(report.getMunicipality());
+        return report;
     }
 
     public List<ShiftHandoverReport> findByMunicipality(String municipality) {
+        CurrentUser.assertAccessible(municipality);
         return reportRepository.findByMunicipalityIgnoreCaseOrderByShiftDateDesc(municipality);
     }
 
     public Page<ShiftHandoverReport> findAll(Pageable pageable) {
-        return reportRepository.findAllByOrderByShiftDateDesc(pageable);
+        return CurrentUser.municipality()
+                .map(m -> reportRepository.findByMunicipalityIgnoreCaseOrderByShiftDateDesc(m, pageable))
+                .orElseGet(() -> reportRepository.findAllByOrderByShiftDateDesc(pageable));
     }
 
     private String buildSummary(LocalDate shiftDate, ShiftType shiftType, String municipality,

@@ -20,7 +20,8 @@ public record VisitResponse(
         VisitStatus status,
         VisitType visitType,
         String notes,
-        String location
+        String location,
+        UUID vedtakId
 ) {
     public static VisitResponse from(Visit v) {
         return new VisitResponse(
@@ -36,7 +37,8 @@ public record VisitResponse(
                 v.getStatus(),
                 v.getVisitType(),
                 v.getNotes(),
-                v.getLocation()
+                v.getLocation(),
+                v.getVedtak() == null ? null : v.getVedtak().getId()
         );
     }
 }

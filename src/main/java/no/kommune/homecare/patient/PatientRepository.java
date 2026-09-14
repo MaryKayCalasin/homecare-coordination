@@ -21,6 +21,8 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
     Page<Patient> findByFullNameContainingIgnoreCase(String name, Pageable pageable);
 
+    Page<Patient> findByFullNameContainingIgnoreCaseAndMunicipalityIgnoreCase(String name, String municipality, Pageable pageable);
+
     @Query("select distinct p.municipality from Patient p where p.active = true")
     List<String> findDistinctActiveMunicipalities();
 }

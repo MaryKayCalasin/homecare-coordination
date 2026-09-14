@@ -18,5 +18,7 @@ public interface NurseRepository extends JpaRepository<Nurse, UUID> {
 
     List<Nurse> findByMunicipalityIgnoreCaseAndActiveTrue(String municipality);
 
+    Page<Nurse> findPageByMunicipalityIgnoreCaseAndActiveTrue(String municipality, Pageable pageable);
+
     Optional<Nurse> findByUserId(UUID userId);
 }

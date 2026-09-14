@@ -66,11 +66,11 @@ class VisitRedistributionServiceTest {
                 visitRepository, nurseRepository, absenceRepository, visitService, eventPublisher, auditService);
 
         absentNurse = withId(Nurse.builder().fullName("Absent Nurse")
-                .employeeId("N1").municipality("Oslo").active(true).build());
+                .employeeId("N1").municipality("Oslo").active(true).canGiveMedication(true).build());
         lightlyLoadedNurse = withId(Nurse.builder().fullName("Free Nurse")
-                .employeeId("N2").municipality("Oslo").active(true).build());
+                .employeeId("N2").municipality("Oslo").active(true).canGiveMedication(true).build());
         busyNurse = withId(Nurse.builder().fullName("Busy Nurse")
-                .employeeId("N3").municipality("Oslo").active(true).build());
+                .employeeId("N3").municipality("Oslo").active(true).canGiveMedication(true).build());
 
         patient = withId(Patient.builder().fullName("Test Patient")
                 .nationalId("01019012345").municipality("Oslo").careLevel(CareLevel.MEDIUM).active(true).build());
@@ -138,6 +138,72 @@ class VisitRedistributionServiceTest {
         verify(visitService).unassign(affectedVisit.getId());
         assertThat(result.reassignments()).isEmpty();
         assertThat(result.unassignedVisitIds()).containsExactly(affectedVisit.getId());
+    }
+
+    @Test
+    void skipsAnUnqualifiedNurseEvenIfLessLoaded() {
+        Nurse unqualifiedButFree = withId(Nurse.builder().fullName("Unqualified Free Nurse")
+                .employeeId("N4").municipality("Oslo").active(true).canGiveMedication(false).build());
+
+        Visit affectedVisit = withId(Visit.builder().patient(patient).nurse(absentNurse)
+                .scheduledStart(visitStart).scheduledEnd(visitEnd)
+                .status(VisitStatus.SCHEDULED).visitType(VisitType.MEDICATION).build());
+
+        when(visitRepository.findByNurseIdAndStatusAndScheduledStartBetween(
+                eq(absentNurse.getId()), eq(VisitStatus.SCHEDULED), any(), any()))
+                .thenReturn(List.of(affectedVisit));
+
+        // The unqualified nurse is listed first and has zero load, so a
+        // load-only pick would wrongly choose them over the busier but
+        // properly qualified nurse.
+        when(nurseRepository.findByMunicipalityIgnoreCaseAndActiveTrue("Oslo"))
+                .thenReturn(List.of(unqualifiedButFree, busyNurse));
+
+        when(visitRepository.findByNurseIdAndScheduledStartBetween(eq(unqualifiedButFree.getId()), any(), any()))
+                .thenReturn(List.of());
+        when(visitRepository.findByNurseIdAndScheduledStartBetween(eq(busyNurse.getId()), any(), any()))
+                .thenReturn(List.of());
+
+        when(absenceRepository.findByNurseIdAndStartDateTimeLessThanEqualAndEndDateTimeGreaterThanEqual(
+                any(), any(), any())).thenReturn(List.of());
+
+        RedistributionMessage result = redistributionService.redistribute(absence);
+
+        assertThat(result.reassignments()).hasSize(1);
+        assertThat(result.reassignments().get(0).newNurseId()).isEqualTo(busyNurse.getId());
+    }
+
+    @Test
+    void prefersANurseWithPriorHistoryWithThePatientOverALessLoadedStranger() {
+        Visit affectedVisit = withId(Visit.builder().patient(patient).nurse(absentNurse)
+                .scheduledStart(visitStart).scheduledEnd(visitEnd)
+                .status(VisitStatus.SCHEDULED).visitType(VisitType.MEDICATION).build());
+
+        when(visitRepository.findByNurseIdAndStatusAndScheduledStartBetween(
+                eq(absentNurse.getId()), eq(VisitStatus.SCHEDULED), any(), any()))
+                .thenReturn(List.of(affectedVisit));
+
+        when(nurseRepository.findByMunicipalityIgnoreCaseAndActiveTrue("Oslo"))
+                .thenReturn(List.of(lightlyLoadedNurse, busyNurse));
+
+        when(visitRepository.findByNurseIdAndScheduledStartBetween(eq(lightlyLoadedNurse.getId()), any(), any()))
+                .thenReturn(List.of());
+        when(visitRepository.findByNurseIdAndScheduledStartBetween(eq(busyNurse.getId()), any(), any()))
+                .thenReturn(List.of());
+
+        // busyNurse has cared for this patient before; lightlyLoadedNurse hasn't.
+        when(visitRepository.existsByNurseIdAndPatientIdAndStatusNot(
+                busyNurse.getId(), patient.getId(), VisitStatus.CANCELLED)).thenReturn(true);
+        when(visitRepository.existsByNurseIdAndPatientIdAndStatusNot(
+                lightlyLoadedNurse.getId(), patient.getId(), VisitStatus.CANCELLED)).thenReturn(false);
+
+        when(absenceRepository.findByNurseIdAndStartDateTimeLessThanEqualAndEndDateTimeGreaterThanEqual(
+                any(), any(), any())).thenReturn(List.of());
+
+        RedistributionMessage result = redistributionService.redistribute(absence);
+
+        assertThat(result.reassignments()).hasSize(1);
+        assertThat(result.reassignments().get(0).newNurseId()).isEqualTo(busyNurse.getId());
     }
 
     /** Test entities get their id via the inherited setter since {@code @Builder} does not see superclass fields. */

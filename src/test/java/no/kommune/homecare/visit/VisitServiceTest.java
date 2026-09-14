@@ -6,6 +6,7 @@ import no.kommune.homecare.nurse.NurseService;
 import no.kommune.homecare.patient.CareLevel;
 import no.kommune.homecare.patient.Patient;
 import no.kommune.homecare.patient.PatientService;
+import no.kommune.homecare.vedtak.VedtakService;
 import no.kommune.homecare.visit.dto.VisitRequest;
 import no.kommune.homecare.websocket.WebSocketEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +40,8 @@ class VisitServiceTest {
     private NurseService nurseService;
     @Mock
     private WebSocketEventPublisher eventPublisher;
+    @Mock
+    private VedtakService vedtakService;
 
     private VisitService visitService;
 
@@ -50,10 +53,10 @@ class VisitServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        visitService = new VisitService(visitRepository, patientService, nurseService, eventPublisher);
+        visitService = new VisitService(visitRepository, patientService, nurseService, eventPublisher, vedtakService);
 
         nurse = withId(Nurse.builder().fullName("Kari Nordmann")
-                .employeeId("N1").municipality("Oslo").active(true).build());
+                .employeeId("N1").municipality("Oslo").active(true).canGiveMedication(true).build());
         patient = withId(Patient.builder().fullName("Test Patient")
                 .nationalId("01019012345").municipality("Oslo").careLevel(CareLevel.MEDIUM).active(true).build());
 
@@ -112,6 +115,23 @@ class VisitServiceTest {
         Visit created = visitService.create(overlapping);
 
         assertThat(created).isNotNull();
+    }
+
+    @Test
+    void rejectsAssigningANurseNotQualifiedForTheVisitType() {
+        Nurse unqualifiedNurse = withId(Nurse.builder().fullName("Ola Hansen")
+                .employeeId("N2").municipality("Oslo").active(true).canGiveMedication(false).build());
+        when(nurseService.getById(unqualifiedNurse.getId())).thenReturn(unqualifiedNurse);
+
+        when(visitRepository.findByNurseIdAndScheduledStartBetween(any(), any(), any()))
+                .thenReturn(List.of());
+
+        VisitRequest request = new VisitRequest(
+                patient.getId(), unqualifiedNurse.getId(), start, end, VisitType.MEDICATION, null, null);
+
+        assertThatThrownBy(() -> visitService.create(request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("not qualified");
     }
 
     @Test

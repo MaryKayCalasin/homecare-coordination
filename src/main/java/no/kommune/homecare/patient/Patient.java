@@ -51,6 +51,16 @@ public class Patient extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String municipality;
 
+    /**
+     * Geocoded address coordinates, null until the frontend's client-side
+     * Nominatim lookup has resolved this patient's address at least once.
+     * Used only to check travel time between consecutive visits - never a
+     * hard requirement, since a lot of patients will have neither.
+     */
+    private Double latitude;
+
+    private Double longitude;
+
     @Column(length = 20)
     private String phone;
 

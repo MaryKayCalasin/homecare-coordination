@@ -38,4 +38,7 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
 
     @EntityGraph(attributePaths = {"patient", "nurse"})
     List<Visit> findByScheduledStartBetween(Instant from, Instant to);
+
+    /** Used to prefer a patient's previous nurse when redistributing a visit. */
+    boolean existsByNurseIdAndPatientIdAndStatusNot(UUID nurseId, UUID patientId, VisitStatus status);
 }

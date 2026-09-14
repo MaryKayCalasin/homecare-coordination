@@ -7,6 +7,7 @@ import no.kommune.homecare.common.exception.BusinessRuleException;
 import no.kommune.homecare.security.dto.LoginRequest;
 import no.kommune.homecare.security.dto.LoginResponse;
 import no.kommune.homecare.security.dto.RegisterRequest;
+import no.kommune.homecare.user.Role;
 import no.kommune.homecare.user.User;
 import no.kommune.homecare.user.UserRepository;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -48,6 +49,10 @@ public class AuthService {
         if (userRepository.existsByEmail(request.email())) {
             throw new BusinessRuleException("Email already registered: " + request.email());
         }
+        if (request.role() != Role.ADMIN && (request.municipality() == null || request.municipality().isBlank())) {
+            throw new BusinessRuleException("municipality is required for role " + request.role());
+        }
+        CurrentUser.assertAccessible(request.municipality());
 
         User user = User.builder()
                 .username(request.username())
@@ -55,6 +60,7 @@ public class AuthService {
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .fullName(request.fullName())
                 .role(request.role())
+                .municipality(request.municipality())
                 .enabled(true)
                 .build();
 

@@ -8,6 +8,7 @@ import no.kommune.homecare.common.exception.ResourceNotFoundException;
 import no.kommune.homecare.absence.dto.AbsenceRequest;
 import no.kommune.homecare.nurse.Nurse;
 import no.kommune.homecare.nurse.NurseService;
+import no.kommune.homecare.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,15 +47,23 @@ public class AbsenceService {
     }
 
     public Absence getById(UUID id) {
-        return absenceRepository.findById(id)
+        Absence absence = absenceRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Absence", id));
+        CurrentUser.assertAccessible(absence.getNurse().getMunicipality());
+        return absence;
     }
 
     public List<Absence> findByNurse(UUID nurseId) {
+        // Throws if the nurse belongs to another kommune than the caller.
+        nurseService.getById(nurseId);
         return absenceRepository.findByNurseId(nurseId);
     }
 
     public List<Absence> findAll() {
-        return absenceRepository.findAll();
+        return CurrentUser.municipality()
+                .map(m -> absenceRepository.findAll().stream()
+                        .filter(a -> m.equalsIgnoreCase(a.getNurse().getMunicipality()))
+                        .toList())
+                .orElseGet(absenceRepository::findAll);
     }
 }

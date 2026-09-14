@@ -10,6 +10,7 @@ import no.kommune.homecare.nurse.NurseService;
 import no.kommune.homecare.observation.dto.ObservationRequest;
 import no.kommune.homecare.patient.Patient;
 import no.kommune.homecare.patient.PatientService;
+import no.kommune.homecare.security.CurrentUser;
 import no.kommune.homecare.visit.Visit;
 import no.kommune.homecare.visit.VisitService;
 import no.kommune.homecare.websocket.WebSocketEventPublisher;
@@ -75,25 +76,37 @@ public class ObservationService {
     }
 
     public Observation getById(UUID id) {
-        return observationRepository.findById(id)
+        Observation observation = observationRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Observation", id));
+        CurrentUser.assertAccessible(observation.getPatient().getMunicipality());
+        return observation;
     }
 
     @Auditable(action = AuditAction.READ, entityType = "Observation", details = "Patient journal accessed")
     public Page<Observation> findByPatient(UUID patientId, Pageable pageable) {
+        // Throws if the patient belongs to another kommune than the caller.
+        patientService.getById(patientId);
         return observationRepository.findByPatientIdOrderByRecordedAtDesc(patientId, pageable);
     }
 
     public List<Observation> findUnresolvedUrgent() {
-        return observationRepository.findByUrgentTrueAndUrgentResolvedFalseOrderByRecordedAtDesc();
+        return filterToOwnMunicipality(observationRepository.findByUrgentTrueAndUrgentResolvedFalseOrderByRecordedAtDesc());
     }
 
     public List<Observation> findByRange(Instant from, Instant to) {
-        return observationRepository.findByRecordedAtBetweenOrderByRecordedAtAsc(from, to);
+        return filterToOwnMunicipality(observationRepository.findByRecordedAtBetweenOrderByRecordedAtAsc(from, to));
     }
 
     public List<Observation> findUrgentByRange(Instant from, Instant to) {
-        return observationRepository.findByUrgentTrueAndRecordedAtBetween(from, to);
+        return filterToOwnMunicipality(observationRepository.findByUrgentTrueAndRecordedAtBetween(from, to));
+    }
+
+    private List<Observation> filterToOwnMunicipality(List<Observation> observations) {
+        return CurrentUser.municipality()
+                .map(m -> observations.stream()
+                        .filter(o -> m.equalsIgnoreCase(o.getPatient().getMunicipality()))
+                        .toList())
+                .orElse(observations);
     }
 
     @Auditable(action = AuditAction.UPDATE, entityType = "Observation", details = "Urgent flag resolved")
