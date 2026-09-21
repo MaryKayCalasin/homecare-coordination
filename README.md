@@ -1,6 +1,6 @@
 # Homecare Coordination
 
-A home care management platform for Norwegian municipalities (hjemmesykepleie / hjemmetjeneste), built with Java 17 and Spring Boot 3.
+A home care coordination platform for Norwegian municipalities in real time scheduling, absence handling and visit redistribution for home care services. Built with Java 17 and Spring Boot 3
 
 ## Features
 
